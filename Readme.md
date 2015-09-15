@@ -15,22 +15,27 @@ While manually issuing a card for a user and then using that card for operations
 Issuance of a Crescendo C1150 smart card makes use of the [CNG Key Storage Functions](https://msdn.microsoft.com/en-us/library/windows/desktop/aa376208(v=vs.85).aspx)
 
 1. Connect to the smart card.
+
     NCryptOpenStorageProvider(&hProv, MS_SMART_CARD_KEY_STORAGE_PROVIDER, 0);
 
 2. If needed, retrieve the unique card serial number
+
     NCryptGetProperty(hProv, NCRYPT_SMARTCARD_GUID_PROPERTY, pbSerial, cbSerial, &cbSerial, 0);
 
 3. Create a new persisted key, setting the desired length. It is possible to programatically pass the value of the card PIN and request the operation to be silent so no user interface is displayed. Alternatively, if the PIN is not passed Windows will display a dialog box prompting the user to enter the smart card PIN value. The default PIN of Crescendo smart cards is '00000000'.
+
     NCryptCreatePersistedKey(hProv, &hKey, BCRYPT_RSA_ALGORITHM, L"Crescendo C1150 Key", AT_SIGNATURE, 0);
     NCryptSetProperty(hKey, NCRYPT_LENGTH_PROPERTY, (LPBYTE)&dwKeyLen, 4, 0);
     NCryptSetProperty(hKey, NCRYPT_PIN_PROPERTY, (LPBYTE)szPin, 8, 0);
     NCryptFinalizeKey(hKey, NCRYPT_SILENT_FLAG);
 
 4. Keys are generated and used in the trusted execution environment provided by the smart card. The public key can be exported in order to create a certificate request and submit it to a certification authoritiy. The certificate can be then added to the keypair.
+
     NCryptExportKey(hKey, 0, BCRYPT_RSAPUBLIC_BLOB, 0, pbRawKey, cbRawKey, &cbRawKey, 0);
     NCryptSetProperty(hKey, NCRYPT_CERTIFICATE_PROPERTY, pbCert, cbCert, 0);
 
 5. Keys (and their associated certificates) can also be deleted from the smart card. Again, the PIN could be passed programmatically to avoid a prompt to enter it.
+
     NCryptOpenKey(hProv, &hKey, L"Crescendo C1150 Key", AT_SIGNATURE, 0);
     NCryptDeleteKey(hKey, 0);  // After this, no need to free the key handle
 
