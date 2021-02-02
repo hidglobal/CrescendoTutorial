@@ -1,12 +1,8 @@
-﻿# Crescendo C1150 Tutorial
+# Crescendo Management Tutorial
 
-Smart cards provide an isolated computing environment ideal for protection of highly valuable assets such as cryptographic keys. Smart cards with cryptographic capabilities like the [HID Crescendo C1150](http://www.hidglobal.com/products/cards-and-credentials/crescendo/c1150) enable system administrators and developers to greatly enhance their security posture and are easy to integrate into the Microsoft Windows environment.
+Smart cards provide an isolated computing environment ideal for protection of highly valuable assets such as cryptographic keys. Smart cards with cryptographic capabilities like the [HID Crescendo C2300](http://www.hidglobal.com/products/cards-and-credentials/crescendo/c2300) enable system administrators and developers to greatly enhance their security posture and are easy to integrate into the Microsoft Windows environment.
 
-At the end of the 20th century, the need to protect keys started to be recognized and two main alternatives emerged for developers to leverage the capabilities of smart cards without having to deal with low level commands and data structure. On one hand there was the [RSA Labs PKCS#11 Initiative](ftp://ftp.rsasecurity.com/pub/pkcs/pkcs-11/v2-20/pkcs-11v2-20.pdf) and on the other the [Microsoft CryptoAPI](https://msdn.microsoft.com/en-us/library/windows/desktop/aa380255(v=vs.85).aspx).
-
-Those standards have helped foster adoption of smart cards, but they have aged and lessons learned have contributed to the emergence of new approaches that provide better abstraction. This enables developers to be more productive and paves the road for adoption of new cryptographic algorithms.
-
-The [Cryptogpraphic API: Next Generation](https://msdn.microsoft.com/en-us/library/windows/desktop/aa376210(v=vs.85).aspx) provides a modern alternative to those legacy libraries and the HID Crescendo C1150 integrates seamlessly in that ecosystem providing a cost-effective, easy to deploy high security user identity device.
+The Windows [Cryptogpraphic API: Next Generation](https://msdn.microsoft.com/en-us/library/windows/desktop/aa376210(v=vs.85).aspx) provides a low level API to manage key material and certificates in smart cards.
 
 ## Crescendo Card Issuance
 

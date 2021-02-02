@@ -1,6 +1,6 @@
 #include <Windows.h>
 #include <ncrypt.h>
-#include <cardmod.h>
+#include "cardmod.h"
 
 typedef DWORD(WINAPI *PACQUIRECONTEXT)(PCARD_DATA, DWORD);
 
@@ -47,7 +47,7 @@ LONG DesResponse(LPBYTE pbData, DWORD cbData)
 	if (!CryptAcquireContext(
 		&hProv,
 		NULL,
-		L"Microsoft Enhanced Cryptographic Provider V1.0",
+		MS_ENHANCED_PROV,
 		PROV_RSA_FULL,
 		CRYPT_VERIFYCONTEXT))
 	{
@@ -106,12 +106,93 @@ Cleanup:
 	return lRet;
 }
 
+LONG AesResponse(LPBYTE pbData, DWORD cbData)
+{
+	DWORD lRet = SCARD_S_SUCCESS;
+	HCRYPTPROV hProv = 0;
+	DWORD dwMode = CRYPT_MODE_CBC;
+	BYTE* pbLocData = NULL;
+	DWORD cbLocData = 16, count = 0;
+	HCRYPTKEY hKey = 0;
+
+	BYTE AesKeyBlob[] = {
+		0x08, 0x02, 0x00, 0x00, 0x0E, 0x66, 0x00, 0x00,
+		0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00
+	};
+
+	pbLocData = (BYTE*)malloc(sizeof(BYTE) * cbLocData);
+	memcpy(pbLocData, pbData, cbLocData);
+
+	if (!CryptAcquireContext(
+		&hProv,
+		NULL,
+		MS_ENH_RSA_AES_PROV,
+		PROV_RSA_AES,
+		CRYPT_VERIFYCONTEXT))
+	{
+		lRet = GetLastError();
+		goto Cleanup;
+	}
+	if (!CryptImportKey(
+		hProv,
+		AesKeyBlob,
+		sizeof(AesKeyBlob),
+		0,
+		0,
+		&hKey))
+	{
+		lRet = GetLastError();
+		goto Cleanup;
+	}
+	if (!CryptSetKeyParam(
+		hKey,
+		KP_MODE,
+		(BYTE*)&dwMode,
+		0))
+	{
+		lRet = GetLastError();
+		goto Cleanup;
+	}
+	if (!CryptEncrypt(
+		hKey,
+		0,
+		FALSE,
+		0,
+		pbLocData,
+		&cbLocData,
+		cbLocData))
+	{
+		lRet = GetLastError();
+		goto Cleanup;
+	}
+
+	memcpy(pbData, pbLocData, cbLocData);
+
+Cleanup:
+	if (hKey)
+	{
+		CryptDestroyKey(hKey);
+		hKey = 0;
+	}
+	if (pbLocData)
+	{
+		free(pbLocData);
+		pbLocData = NULL;
+	}
+	if (hProv)
+		CryptReleaseContext(hProv, 0);
+
+	return lRet;
+}
+
 int main()
 {
 	NCRYPT_PROV_HANDLE hProv;
 	NCRYPT_KEY_HANDLE  hKey;
 	SECURITY_STATUS    lRet;
-	LPTSTR             szPin = L"1A2B1C2D";
+	LPTSTR             szPin = L"00000000";
 	LPBYTE             pbRawKey;
 	DWORD              cbRawKey;
 	LPBYTE             pbSerial = NULL;
@@ -183,29 +264,44 @@ int main()
 
 	lRet = (pCardAcquireContext)(&cardData, 0);
 
+	// Verify User PIN
+	BYTE   pbPin[] = { 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30 };
+	DWORD  cbPin = 8;
+	lRet = (cardData.pfnCardAuthenticatePin)(&cardData, wszCARD_USER_USER, pbPin, cbPin, &cbRemaining);
+
+	// Change User PIN
+	BYTE   pbNewPin[] = { 0x31, 0x31, 0x32, 0x32, 0x33, 0x33 };
+	DWORD  cbNewPin = 6;
+	lRet = (cardData.pfnCardChangeAuthenticator)(&cardData, wszCARD_USER_USER, pbPin, cbPin, pbNewPin, cbNewPin, 0, PIN_CHANGE_FLAG_CHANGEPIN, &cbRemaining);
+
 	// Challenge / response authentication
 	lRet = (cardData.pfnCardGetChallenge)(&cardData, &ppbChallenge, &cbChallenge);
-	lRet = DesResponse(ppbChallenge, cbChallenge);
+	if (cbChallenge == 8) {
+		lRet = DesResponse(ppbChallenge, cbChallenge);
+	}
+	else {
+		lRet = AesResponse(ppbChallenge, cbChallenge);
+	}
 	lRet = (cardData.pfnCardAuthenticateChallenge)(&cardData, ppbChallenge, cbChallenge, &cbRemaining);
 	(cardData.pfnCspFree)(ppbChallenge);
 
 	/*
-	// Change the authenticator
+	// Change administration key
 	lRet = (cardData.pfnCardGetChallenge)(&cardData, &ppbChallenge, &cbChallenge);
 	lRet = DesResponse(ppbChallenge, cbChallenge);
 	lRet = (cardData.pfnCardChangeAuthenticator)(&cardData, wszCARD_USER_ADMIN, ppbChallenge, cbChallenge, pbNewKey, 0x18, 0, CARD_AUTHENTICATE_PIN_CHALLENGE_RESPONSE, &cbRemaining);
 	(cardData.pfnCspFree)(ppbChallenge);
 	*/
-	// Verify User PIN
-	BYTE   pbPin[] = { 0x31, 0x41, 0x32, 0x42, 0x31, 0x43, 0x32, 0x44 };
-	DWORD  cbPin = 8;
-
-	lRet = (cardData.pfnCardAuthenticatePin)(&cardData, wszCARD_USER_USER, pbPin, cbPin, &cbRemaining);
-
+	
 	// Unblock User PIN
 	lRet = (cardData.pfnCardGetChallenge)(&cardData, &ppbChallenge, &cbChallenge);
-	lRet = DesResponse(ppbChallenge, cbChallenge);
-	lRet = (cardData.pfnCardChangeAuthenticatorEx)(&cardData, PIN_CHANGE_FLAG_UNBLOCK, ROLE_ADMIN, ppbChallenge, cbChallenge, ROLE_USER, pbPin, cbPin, 0, &cbRemaining);
+	if (cbChallenge == 8) {
+		lRet = DesResponse(ppbChallenge, cbChallenge);
+	}
+	else {
+		lRet = AesResponse(ppbChallenge, cbChallenge);
+	}
+	lRet = (cardData.pfnCardChangeAuthenticatorEx)(&cardData, PIN_CHANGE_FLAG_UNBLOCK, ROLE_ADMIN, ppbChallenge, cbChallenge, ROLE_USER, pbNewPin, cbNewPin, 0, &cbRemaining);
 	(cardData.pfnCspFree)(ppbChallenge);
 
 	lRet = (cardData.pfnCardDeleteContext)(&cardData);
