@@ -1,10 +1,12 @@
 # Crescendo Management Tutorial
 
-Smart cards provide an isolated computing environment ideal for protection of highly valuable assets such as cryptographic keys. Smart cards with cryptographic capabilities like the [HID Crescendo C2300](http://www.hidglobal.com/products/cards-and-credentials/crescendo/c2300) enable system administrators and developers to greatly enhance their security posture and are easy to integrate into the Microsoft Windows environment.
+Smart Cards provide an isolated secure computing environment that is ideally suited for storing secret keys, especially those used for authentication and digital signatures. HID&reg; [Crescendo&reg; C2300](http://www.hidglobal.com/products/cards-and-credentials/crescendo/c2300) and [Crescendo&reg; Key](https://www.hidglobal.com/products/cards-and-credentials/crescendo/crescendo-key) allow companies and individuals to prevent breaches by removing the most common attack vector: passwords.
 
-The Windows [Cryptogpraphic API: Next Generation](https://msdn.microsoft.com/en-us/library/windows/desktop/aa376210(v=vs.85).aspx) provides a low level API to manage key material and certificates in smart cards.
+Crescendo&reg; devices support FIDO2, OATH and PIV (PKI) protocols. The sample in this repository focuses on using the PKI capabilities of the devices, but you may be interested in looking also at the [Crescendo&amp; FIDO Sample](https://glitch.com/~crescendo-webauthn)
 
 ## Crescendo Card Issuance
+
+The Windows [Cryptogpraphic API: Next Generation](https://msdn.microsoft.com/en-us/library/windows/desktop/aa376210(v=vs.85).aspx) provides a low level API to manage key material and certificates in smart cards.
 
 While manually issuing a card for a user and then using that card for operations such as logging on to Windows, accessing a VPN or digitally signing an email or Office document do not require any development, there may be cases when the lifecycle of the card needs to be managed by a specialized tool that enables more granular control of the contents of each individual card. In general, to issue a card a developer would go through the following process that is illustrated in the working example in this repository.
 
