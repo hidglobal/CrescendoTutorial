@@ -1,4 +1,5 @@
-Debug/
+.vscode/
+build/
 *.opensdf
 *.opendb
 *.sdf
