@@ -262,9 +262,6 @@ int main()
 
 	hDriver = LoadLibrary(szProvider);
 
-	lRet = SCardBeginTransaction(ocn->hCardHandle);
-	CheckResult("SCardBeginTransaction", lRet);
-
 	pCardAcquireContext = (PACQUIRECONTEXT)GetProcAddress(hDriver, "CardAcquireContext");
 
 	memset(&cardData, 0, sizeof(CARD_DATA));
@@ -285,16 +282,24 @@ int main()
 	CheckResult("CardAcquireContext", lRet);
 
 	// Verify User PIN
-	BYTE   pbPin[] = { 0x30, 0x30, 0x30, 0x30, 0x30, 0x30 };
-	DWORD  cbPin = 6;
+	BYTE   pbPin[] = { 0x34, 0x30, 0x34, 0x31, 0x34, 0x32, 0x34, 0x33 };
+	DWORD  cbPin = 8;
 	lRet = (cardData.pfnCardAuthenticatePin)(&cardData, wszCARD_USER_USER, pbPin, cbPin, &cbRemaining);
 	CheckResult("CardAuthenticatePin", lRet);
 
 	// Change User PIN
-	BYTE   pbNewPin[] = { 0x31, 0x31, 0x32, 0x32, 0x33, 0x33 };
-	DWORD  cbNewPin = 6;
+	BYTE   pbNewPin[] = { 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30 };
+	DWORD  cbNewPin = 8;
+	lRet = (cardData.pfnCardChangeAuthenticatorEx)(&cardData, PIN_CHANGE_FLAG_CHANGEPIN, ROLE_USER, pbPin, cbPin, ROLE_USER, pbNewPin, cbNewPin, 0, &cbRemaining);
 	//lRet = (cardData.pfnCardChangeAuthenticator)(&cardData, wszCARD_USER_USER, pbPin, cbPin, pbNewPin, cbNewPin, 0, PIN_CHANGE_FLAG_CHANGEPIN, &cbRemaining);
+	CheckResult("CardChangeAuthenticatorEx", lRet);
 
+	BYTE  pbNewKey[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+					     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+					     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+	DWORD cbNewKey = 16;
+	lRet = (cardData.pfnCardChangeAuthenticatorEx)(&cardData, PIN_CHANGE_FLAG_UNBLOCK, ROLE_USER, pbNewPin, cbNewPin, ROLE_ADMIN, pbNewKey, cbNewKey, 0, &cbRemaining);
+	CheckResult("CardChangeAuthenticatorEx", lRet);
 	// Challenge / response authentication
 	lRet = (cardData.pfnCardGetChallenge)(&cardData, &ppbChallenge, &cbChallenge);
 	CheckResult("CardGetChallenge", lRet);
@@ -313,10 +318,6 @@ int main()
 	// Change administration key
 	lRet = (cardData.pfnCardGetChallenge)(&cardData, &ppbChallenge, &cbChallenge);
 	CheckResult("CardGetChallenge", lRet);
-	BYTE  pbNewKey[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-					     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-					     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-	DWORD cbNewKey = 24;
 	if (cbChallenge == 8) {
 		lRet = DesResponse(ppbChallenge, cbChallenge);
 		CheckResult("DesResponse", lRet);
@@ -348,8 +349,6 @@ int main()
 
 	lRet = (cardData.pfnCardDeleteContext)(&cardData);
 	CheckResult("CardDeleteContext", lRet);
-	lRet = SCardEndTransaction(ocn->hCardHandle, SCARD_LEAVE_CARD);
-	CheckResult("SCardEndTransaction", lRet);
 	lRet = SCardDisconnect(ocn->hCardHandle, SCARD_LEAVE_CARD);
 	CheckResult("SCardDisconnect", lRet);
 	FreeLibrary(hDriver);
@@ -372,7 +371,7 @@ int main()
 	// Use the serial number and don't forget to free memory!
 	free(pbSerial);
 
-	lRet = NCryptCreatePersistedKey(hProv, &hKey, BCRYPT_RSA_ALGORITHM, L"Crescendo C1150 Key", AT_SIGNATURE, 0);
+	lRet = NCryptCreatePersistedKey(hProv, &hKey, BCRYPT_RSA_ALGORITHM, L"Crescendo 4000 Key", AT_SIGNATURE, 0);
 	CheckResult("NCryptCreatePersistedKey", lRet);
 
 	// DWORDs are 4 bytes long
@@ -396,7 +395,7 @@ int main()
 	CheckResult("NCryptFreeObject", lRet);
 
 	// Now delete the key. We get a new handle to show how it would happen in a different session
-	lRet = NCryptOpenKey(hProv, &hKey, L"Crescendo C1150 Key", AT_SIGNATURE, 0);
+	lRet = NCryptOpenKey(hProv, &hKey, L"Crescendo 4000 Key", AT_SIGNATURE, 0);
 	CheckResult("NCryptOpenKey", lRet);
 	lRet = NCryptSetProperty(hKey, NCRYPT_PIN_PROPERTY, (LPBYTE)szPin, 8, 0);
 	CheckResult("NCryptSetProperty", lRet);
