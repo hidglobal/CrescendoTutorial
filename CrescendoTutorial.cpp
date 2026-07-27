@@ -1,4 +1,5 @@
 #include <Windows.h>
+#include <bcrypt.h>
 #include <ncrypt.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,167 +36,331 @@ void WINAPI CspFree(LPVOID Address)
 	}
 }
 
+const char* PinIdToLabel(DWORD pinId)
+{
+	switch (pinId)
+	{
+	case ROLE_USER:
+		return "ROLE_USER";
+	case ROLE_ADMIN:
+		return "ROLE_ADMIN";
+	default:
+		break;
+	}
+
+	static char labels[MAX_PINS][8];
+	if (pinId < MAX_PINS)
+	{
+		sprintf_s(labels[pinId], sizeof(labels[pinId]), "%lu", (unsigned long)pinId);
+		return labels[pinId];
+	}
+
+	return "Unknown";
+}
+
+const char* SecretTypeToString(SECRET_TYPE secretType)
+{
+	switch (secretType)
+	{
+	case AlphaNumericPinType:
+		return "AlphaNumericPinType";
+	case ExternalPinType:
+		return "ExternalPinType";
+	case ChallengeResponsePinType:
+		return "ChallengeResponsePinType";
+	case EmptyPinType:
+		return "EmptyPinType";
+	default:
+		return "UnknownSecretType";
+	}
+}
+
+const char* SecretPurposeToString(SECRET_PURPOSE secretPurpose)
+{
+	switch (secretPurpose)
+	{
+	case AuthenticationPin:
+		return "AuthenticationPin";
+	case DigitalSignaturePin:
+		return "DigitalSignaturePin";
+	case EncryptionPin:
+		return "EncryptionPin";
+	case NonRepudiationPin:
+		return "NonRepudiationPin";
+	case AdministratorPin:
+		return "AdministratorPin";
+	case PrimaryCardPin:
+		return "PrimaryCardPin";
+	case UnblockOnlyPin:
+		return "UnblockOnlyPin";
+	default:
+		return "UnknownSecretPurpose";
+	}
+}
+
+void FormatPinSet(PIN_SET pinSet, char* output, size_t outputSize)
+{
+	bool first = true;
+
+	if (!output || outputSize == 0)
+	{
+		return;
+	}
+
+	output[0] = '\0';
+	for (DWORD i = 0; i < MAX_PINS; i++)
+	{
+		if (!IS_PIN_SET(pinSet, i))
+		{
+			continue;
+		}
+
+		if (!first)
+		{
+			strcat_s(output, outputSize, ",");
+		}
+		strcat_s(output, outputSize, PinIdToLabel(i));
+		first = false;
+	}
+
+	if (first)
+	{
+		strcpy_s(output, outputSize, "None");
+	}
+}
+
+void PrintPinInfo(int pinId, const PIN_INFO* pinInfo)
+{
+	char changePermission[128] = { 0 };
+	char unblockPermission[128] = { 0 };
+	static bool headerPrinted = false;
+
+	if (!pinInfo)
+	{
+		return;
+	}
+
+	FormatPinSet(pinInfo->dwChangePermission, changePermission, sizeof(changePermission));
+	FormatPinSet(pinInfo->dwUnblockPermission, unblockPermission, sizeof(unblockPermission));
+
+	if (!headerPrinted)
+	{
+		printf("\n%-12s %-28s %-24s %-32s %-32s\n",
+			"PIN",
+			"Secret Type",
+			"Secret Purpose",
+			"Change Permission",
+			"Unblock Permission");
+		printf("%-12s %-28s %-24s %-32s %-32s\n",
+			"------------",
+			"----------------------------",
+			"------------------------",
+			"--------------------------------",
+			"--------------------------------");
+		headerPrinted = true;
+	}
+
+	printf("%-12s %-28s %-24s %-32s %-32s\n",
+		PinIdToLabel((DWORD)pinId),
+		SecretTypeToString(pinInfo->PinType),
+		SecretPurposeToString(pinInfo->PinPurpose),
+		changePermission,
+		unblockPermission);
+}
+
+LONG SymmetricChallengeResponse(
+	LPBYTE pbData,
+	DWORD cbData,
+	LPCWSTR pszAlgorithm,
+	const BYTE* pbKey,
+	DWORD cbKey,
+	LPCWSTR pszChainingMode,
+	const BYTE* pbIv,
+	DWORD cbIv);
+
 LONG DesResponse(LPBYTE pbData, DWORD cbData)
 {
-	DWORD lRet = SCARD_S_SUCCESS;
-	HCRYPTPROV hProv = 0;
-	DWORD dwMode = CRYPT_MODE_ECB;
-	BYTE *pbLocData = NULL;
-	DWORD cbLocData = 8, count = 0;
-	HCRYPTKEY hKey = 0;
-
-	BYTE DesKeyBlob[] = {
-		0x08, 0x02, 0x00, 0x00, 0x03, 0x66, 0x00, 0x00,
-		0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	const BYTE desKey[24] = {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 	};
 
-	pbLocData = (BYTE *)malloc(sizeof(BYTE)*cbLocData);
-	memcpy(pbLocData, pbData, cbLocData);
-
-	if (!CryptAcquireContext(
-		&hProv,
+	return SymmetricChallengeResponse(
+		pbData,
+		cbData,
+		BCRYPT_3DES_ALGORITHM,
+		desKey,
+		(DWORD)sizeof(desKey),
+		BCRYPT_CHAIN_MODE_ECB,
 		NULL,
-		MS_ENHANCED_PROV,
-		PROV_RSA_FULL,
-		CRYPT_VERIFYCONTEXT))
+		0);
+}
+
+LONG SymmetricChallengeResponse(
+	LPBYTE pbData,
+	DWORD cbData,
+	LPCWSTR pszAlgorithm,
+	const BYTE* pbKey,
+	DWORD cbKey,
+	LPCWSTR pszChainingMode,
+	const BYTE* pbIv,
+	DWORD cbIv)
+{
+	BCRYPT_ALG_HANDLE hAlg = NULL;
+	BCRYPT_KEY_HANDLE hKey = NULL;
+	PBYTE pbKeyObject = NULL;
+	PBYTE pbLocData = NULL;
+	PBYTE pbIvLocal = NULL;
+	DWORD cbKeyObject = 0;
+	DWORD cbResult = 0;
+	NTSTATUS status = 0;
+	DWORD cbChainingMode = 0;
+
+	if (!pbData || cbData == 0 || !pszAlgorithm || !pbKey || cbKey == 0 || !pszChainingMode)
 	{
-		lRet = GetLastError();
-		goto Cleanup;
+		return ERROR_INVALID_PARAMETER;
 	}
-	if (!CryptImportKey(
-		hProv,
-		DesKeyBlob,
-		sizeof(DesKeyBlob),
-		0,
-		0,
-		&hKey))
+
+	if ((pbIv && cbIv == 0) || (!pbIv && cbIv != 0))
 	{
-		lRet = GetLastError();
-		goto Cleanup;
+		return ERROR_INVALID_PARAMETER;
 	}
-	if (!CryptSetKeyParam(
-		hKey,
-		KP_MODE,
-		(BYTE *)&dwMode,
-		0))
+
+	pbLocData = (PBYTE)malloc(cbData);
+	if (!pbLocData)
 	{
-		lRet = GetLastError();
-		goto Cleanup;
+		return ERROR_OUTOFMEMORY;
 	}
-	if (!CryptEncrypt(
-		hKey,
-		0,
-		FALSE,
-		0,
-		pbLocData,
-		&cbLocData,
-		cbLocData))
+	memcpy(pbLocData, pbData, cbData);
+
+	if (pbIv && cbIv)
 	{
-		lRet = GetLastError();
+		pbIvLocal = (PBYTE)malloc(cbIv);
+		if (!pbIvLocal)
+		{
+			status = ERROR_OUTOFMEMORY;
+			goto Cleanup;
+		}
+		memcpy(pbIvLocal, pbIv, cbIv);
+	}
+
+	status = BCryptOpenAlgorithmProvider(&hAlg, pszAlgorithm, NULL, 0);
+	if (status < 0)
+	{
 		goto Cleanup;
 	}
 
-	memcpy(pbData, pbLocData, cbLocData);
+	cbChainingMode = ((DWORD)lstrlenW(pszChainingMode) + 1) * sizeof(WCHAR);
+	status = BCryptSetProperty(
+		hAlg,
+		BCRYPT_CHAINING_MODE,
+		(PBYTE)pszChainingMode,
+		cbChainingMode,
+		0);
+	if (status < 0)
+	{
+		goto Cleanup;
+	}
+
+	status = BCryptGetProperty(
+		hAlg,
+		BCRYPT_OBJECT_LENGTH,
+		(PBYTE)&cbKeyObject,
+		sizeof(cbKeyObject),
+		&cbResult,
+		0);
+	if (status < 0)
+	{
+		goto Cleanup;
+	}
+
+	pbKeyObject = (PBYTE)malloc(cbKeyObject);
+	if (!pbKeyObject)
+	{
+		status = ERROR_OUTOFMEMORY;
+		goto Cleanup;
+	}
+
+	status = BCryptGenerateSymmetricKey(
+		hAlg,
+		&hKey,
+		pbKeyObject,
+		cbKeyObject,
+		(PBYTE)pbKey,
+		cbKey,
+		0);
+	if (status < 0)
+	{
+		goto Cleanup;
+	}
+
+	status = BCryptEncrypt(
+		hKey,
+		pbLocData,
+		cbData,
+		NULL,
+		pbIvLocal,
+		cbIv,
+		pbLocData,
+		cbData,
+		&cbResult,
+		0);
+	if (status < 0)
+	{
+		goto Cleanup;
+	}
+
+	if (cbResult != cbData)
+	{
+		status = ERROR_INVALID_DATA;
+		goto Cleanup;
+	}
+
+	memcpy(pbData, pbLocData, cbData);
 
 Cleanup:
 	if (hKey)
 	{
-		CryptDestroyKey(hKey);
-		hKey = 0;
+		BCryptDestroyKey(hKey);
+	}
+	if (pbKeyObject)
+	{
+		free(pbKeyObject);
+	}
+	if (hAlg)
+	{
+		BCryptCloseAlgorithmProvider(hAlg, 0);
+	}
+	if (pbIvLocal)
+	{
+		free(pbIvLocal);
 	}
 	if (pbLocData)
 	{
 		free(pbLocData);
-		pbLocData = NULL;
 	}
-	if (hProv)
-		CryptReleaseContext(hProv, 0);
 
-	return lRet;
+	return status;
 }
 
 LONG AesResponse(LPBYTE pbData, DWORD cbData)
 {
-	DWORD lRet = SCARD_S_SUCCESS;
-	HCRYPTPROV hProv = 0;
-	DWORD dwMode = CRYPT_MODE_CBC;
-	BYTE* pbLocData = NULL;
-	DWORD cbLocData = 16, count = 0;
-	HCRYPTKEY hKey = 0;
-
-	BYTE AesKeyBlob[] = {
-		0x08, 0x02, 0x00, 0x00, 0x0E, 0x66, 0x00, 0x00,
-		0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	const BYTE aesKey[16] = {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 	};
+	BYTE iv[16] = { 0 };
 
-	pbLocData = (BYTE*)malloc(sizeof(BYTE) * cbLocData);
-	memcpy(pbLocData, pbData, cbLocData);
-
-	if (!CryptAcquireContext(
-		&hProv,
-		NULL,
-		MS_ENH_RSA_AES_PROV,
-		PROV_RSA_AES,
-		CRYPT_VERIFYCONTEXT))
-	{
-		lRet = GetLastError();
-		goto Cleanup;
-	}
-	if (!CryptImportKey(
-		hProv,
-		AesKeyBlob,
-		sizeof(AesKeyBlob),
-		0,
-		0,
-		&hKey))
-	{
-		lRet = GetLastError();
-		goto Cleanup;
-	}
-	if (!CryptSetKeyParam(
-		hKey,
-		KP_MODE,
-		(BYTE*)&dwMode,
-		0))
-	{
-		lRet = GetLastError();
-		goto Cleanup;
-	}
-	if (!CryptEncrypt(
-		hKey,
-		0,
-		FALSE,
-		0,
-		pbLocData,
-		&cbLocData,
-		cbLocData))
-	{
-		lRet = GetLastError();
-		goto Cleanup;
-	}
-
-	memcpy(pbData, pbLocData, cbLocData);
-
-Cleanup:
-	if (hKey)
-	{
-		CryptDestroyKey(hKey);
-		hKey = 0;
-	}
-	if (pbLocData)
-	{
-		free(pbLocData);
-		pbLocData = NULL;
-	}
-	if (hProv)
-		CryptReleaseContext(hProv, 0);
-
-	return lRet;
+	return SymmetricChallengeResponse(
+		pbData,
+		cbData,
+		BCRYPT_AES_ALGORITHM,
+		aesKey,
+		(DWORD)sizeof(aesKey),
+		BCRYPT_CHAIN_MODE_CBC,
+		iv,
+		(DWORD)sizeof(iv));
 }
 
 int main()
@@ -218,7 +383,6 @@ int main()
 	LPTSTR             szProvider = NULL;
 	DWORD              cchProvider = 0;
 	HMODULE            hDriver = NULL;
-	DWORD              dwAP = 0;
 	PACQUIRECONTEXT    pCardAcquireContext = NULL;
 	CARD_DATA          cardData;
 	LPBYTE             ppbChallenge;
@@ -346,6 +510,22 @@ int main()
 	lRet = (cardData.pfnCardChangeAuthenticatorEx)(&cardData, PIN_CHANGE_FLAG_UNBLOCK, ROLE_ADMIN, ppbChallenge, cbChallenge, ROLE_USER, pbNewPin, cbNewPin, 0, &cbRemaining);
 	CheckResult("CardChangeAuthenticatorEx", lRet);
 	(cardData.pfnCspFree)(ppbChallenge);
+
+	// Retrieve PIN properties
+	PIN_SET pinSet;
+	DWORD dwDataLen = 0;
+	lRet = (cardData.pfnCardGetProperty)(&cardData, CP_CARD_LIST_PINS, (LPBYTE)&pinSet, sizeof(pinSet), &dwDataLen, 0);
+	CheckResult("CardGetProperty (PIN_SET)", lRet);
+	for (int i = 0; i < 8; i++) {
+		if (IS_PIN_SET(pinSet, i)) {
+			PIN_INFO pinInfo;
+			pinInfo.dwVersion = PIN_INFO_CURRENT_VERSION;
+			dwDataLen = sizeof(pinInfo);
+			lRet = (cardData.pfnCardGetProperty)(&cardData, CP_CARD_PIN_INFO, (LPBYTE)&pinInfo, sizeof(pinInfo), &dwDataLen, i);
+			CheckResult("CardGetProperty (PIN_INFO)", lRet);
+			PrintPinInfo(i, &pinInfo);
+		}
+	}
 
 	lRet = (cardData.pfnCardDeleteContext)(&cardData);
 	CheckResult("CardDeleteContext", lRet);

@@ -1,16 +1,16 @@
-# Crescendo Management Tutorial
+# Crescendo Minidriver Tutorial
 
-Smart Cards provide an isolated secure computing environment that is ideally suited for storing secret keys, especially those used for authentication and digital signatures. HID&reg; [Crescendo&reg; C2300](http://www.hidglobal.com/products/cards-and-credentials/crescendo/c2300) and [Crescendo&reg; Key](https://www.hidglobal.com/products/cards-and-credentials/crescendo/crescendo-key) allow companies and individuals to prevent breaches by removing the most common attack vector: passwords.
-
-Crescendo&reg; devices support FIDO2, OATH and PIV (PKI) protocols. The sample in this repository focuses on using the PKI capabilities of the devices, but you may be interested in looking also at the [Crescendo&amp; FIDO Sample](https://glitch.com/~crescendo-webauthn)
+HID Crescendo&reg; [smart cards](https://www.hidglobal.com/products/crescendo) and [security keys](https://www.hidglobal.com/products/crescendo-key) are natively supported in Windows, macOS or any operating system that supports PIV smart cards. This native support allows _using_ the certificates in the card. There are multiple tools available for Loading certificates and managing the card PIN:
+- The [Crescendo Manager](https://www.hidglobal.com/drivers/48993) tool for individual cards
+- The [Crescendo SDK](https://www.hidglobal.com/drivers/47439) for building applications that support the full range of device capabilities including FIDO2 and OATH.
+- The [HID Credential Management System](https://www.hidglobal.com/products/hid-credential-management-system) for an enterprise-grade management application.
+- The [Crescendo Minidriver](https://www.hidglobal.com/drivers/47444) for Windows tools using the Cryptography API.
 
 ## Crescendo Card Issuance
 
-The Windows [Cryptogpraphic API: Next Generation](https://msdn.microsoft.com/en-us/library/windows/desktop/aa376210(v=vs.85).aspx) provides a low level API to manage key material and certificates in smart cards.
+The Windows [Cryptogpraphic API: Next Generation](https://learn.microsoft.com/en-us/windows/win32/seccng/cng-portal) provides a low level API to manage key material and certificates in _key storage providers_ that include smart cards when strong protection or portability of key material are important attributes of the desired solution. Smart cards typically protect access to private keys with a user PIN and the Windows [Smart Card Minidriver API](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/secsmart/smart-card-api-reference) provides entry points for managing the contents of the card including managing the PIN.
 
-While manually issuing a card for a user and then using that card for operations such as logging on to Windows, accessing a VPN or digitally signing an email or Office document do not require any development, there may be cases when the lifecycle of the card needs to be managed by a specialized tool that enables more granular control of the contents of each individual card. In general, to issue a card a developer would go through the following process that is illustrated in the working example in this repository.
-
-Issuance of a Crescendo C1150 smart card makes use of the [CNG Key Storage Functions](https://msdn.microsoft.com/en-us/library/windows/desktop/aa376208(v=vs.85).aspx)
+The example application in this repository shows the basic sequence typical of card issuance using those Windows APIs. The high level process includes:
 
 1. Connect to the smart card.
 ```

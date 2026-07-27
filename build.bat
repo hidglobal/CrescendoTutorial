@@ -48,7 +48,7 @@ if /i "%ARCH%"=="x86" (
 )
 
 REM Compile and link
-cl %COMMON_FLAGS% %CONFIG_FLAGS% %ARCH_FLAGS% CrescendoTutorial.cpp /Fo"build\%ARCH%\%CONFIG%\CrescendoTutorial.obj" /Fe"build\%ARCH%\%CONFIG%\CrescendoTutorial.exe" /link %LINK_FLAGS% ncrypt.lib winscard.lib scarddlg.lib comctl32.lib advapi32.lib shell32.lib user32.lib ole32.lib /SUBSYSTEM:CONSOLE
+cl %COMMON_FLAGS% %CONFIG_FLAGS% %ARCH_FLAGS% CrescendoTutorial.cpp /Fo"build\%ARCH%\%CONFIG%\CrescendoTutorial.obj" /Fe"build\%ARCH%\%CONFIG%\CrescendoTutorial.exe" /link %LINK_FLAGS% bcrypt.lib ncrypt.lib winscard.lib scarddlg.lib /SUBSYSTEM:CONSOLE
 
 REM Check if build succeeded
 if %ERRORLEVEL% == 0 (
